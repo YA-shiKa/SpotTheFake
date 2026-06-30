@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpotTheFake · Screen Detector</title>
+<style>
+  :root {
+    --bg:      #0c0e14;
+    --surface: #141720;
+    --border:  #232635;
+    --accent:  #6c7bff;
+    --green:   #22d87e;
+    --red:     #ff4f6a;
+    --yellow:  #f5c542;
+    --text:    #e8eaf2;
+    --muted:   #7b7f96;
+    --radius:  14px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 48px;
+  }
+
+  header {
+    width: 100%;
+    max-width: 760px;
+    margin-bottom: 32px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .logo {
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--text);
+  }
+  .logo span { color: var(--accent); }
+  .badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(108,123,255,.15);
+    color: var(--accent);
+    border: 1px solid rgba(108,123,255,.3);
+    border-radius: 99px;
+    padding: 2px 8px;
+  }
+
+  h1 {
+    font-size: clamp(1.6rem, 4vw, 2.5rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    text-align: center;
+    max-width: 640px;
+    margin-bottom: 10px;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.95rem;
+    text-align: center;
+    margin-bottom: 36px;
+    max-width: 480px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 760px;
+    overflow: hidden;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 0.88rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 14px;
+    cursor: pointer;
+    transition: color .2s, background .2s;
+  }
+  .tab.active {
+    color: var(--text);
+    background: rgba(108,123,255,.08);
+    border-bottom: 2px solid var(--accent);
+  }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .panel { display: none; padding: 24px; }
+  .panel.active { display: block; }
+
+  #video-wrap {
+    position: relative;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #060708;
+    aspect-ratio: 4/3;
+    max-height: 420px;
+  }
+  #video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  #canvas { display: none; }
+
+  .capture-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .btn {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: none;
+    font-weight: 700;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: transform .1s, opacity .2s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-secondary {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(108,123,255,.05);
+  }
+  .drop-icon {
+    font-size: 2.4rem;
+    margin-bottom: 10px;
+  }
+  .drop-label { color: var(--muted); font-size: 0.9rem; }
+  .drop-label strong { color: var(--accent); }
+  #file-input { display: none; }
+
+  #preview-wrap {
+    display: none;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #060708;
+    margin-top: 20px;
+    aspect-ratio: 4/3;
+    max-height: 380px;
+  }
+  #preview-img {
+    width: 100%; height: 100%; object-fit: contain; display: block;
+  }
+
+  .result-box {
+    display: none;
+    margin-top: 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    padding: 20px;
+  }
+  .result-box.visible { display: block; }
+
+  .verdict {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .verdict-icon {
+    font-size: 2.2rem;
+    line-height: 1;
+  }
+  .verdict-label {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .verdict-sub {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .gauge-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .gauge-track {
+    height: 10px;
+    background: var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .gauge-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width .6s cubic-bezier(.4,0,.2,1);
+    background: var(--accent);
+  }
+
+  .features {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+  }
+  .feat-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .feat-name {
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .feat-val {
+    font-size: 1.1rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .feat-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 99px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .feat-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--accent);
+  }
+
+  .spinner {
+    display: none;
+    margin: 24px auto;
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .how-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 14px;
+    margin-top: 6px;
+  }
+  .how-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .how-num {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .how-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .how-desc {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  footer {
+    margin-top: 36px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">Spot<span>The</span>Fake</span>
+  <span class="badge">CV Demo</span>
+</header>
+
+<h1>Real photo or photo of a screen?</h1>
+<p class="subtitle">
+  Detects fraud in mobile check-ins: someone photographing a screen instead of the real thing.
+  Runs client-side, no data leaves your device.
+</p>
+
+<div class="card">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('upload')">📂 Upload image</button>
+    <button class="tab" onclick="switchTab('camera')">📷 Live camera</button>
+  </div>
+
+  <div class="panel active" id="panel-upload">
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <div class="drop-icon">🖼</div>
+      <div class="drop-label"><strong>Click to choose</strong> or drag &amp; drop an image here</div>
+      <div class="drop-label" style="margin-top:6px;font-size:0.78rem">JPG · PNG · WebP · HEIC</div>
+    </div>
+    <input type="file" id="file-input" accept="image/*">
+    <div id="preview-wrap"><img id="preview-img" alt="preview"></div>
+    <div class="spinner" id="upload-spinner"></div>
+    <div class="result-box" id="upload-result"></div>
+  </div>
+
+  <div class="panel" id="panel-camera">
+    <div id="video-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas"></canvas>
+    </div>
+    <div class="capture-row">
+      <button class="btn btn-secondary" id="btn-start-cam" onclick="startCamera()">Start camera</button>
+      <button class="btn btn-primary"   id="btn-capture"   onclick="captureFrame()" disabled>Capture &amp; analyse</button>
+    </div>
+    <div class="spinner" id="cam-spinner"></div>
+    <div class="result-box" id="cam-result"></div>
+  </div>
+</div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['upload','camera'][i] === name);
+  });
+  document.querySelectorAll('.panel').forEach((p, i) => {
+    p.classList.toggle('active', ['panel-upload','panel-camera'][i] === `panel-${name}`);
+  });
+}
+
+async function getPrediction(file) {
+  const formData = new FormData();
+  formData.append('image', file);
+
+  try {
+    const response = await fetch('http://127.0.0.1:5000/predict', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Server returned ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    alert("Couldn't reach the prediction server. Make sure server.py is running:\n\n  python server.py\n\nthen reload this page.");
+    return null;
+  }
+}
+
+function renderResult(container, result) {
+  const { score, label } = result;
+  const isScreen = label === 'FAKE';
+  const pct = Math.round(score * 100);
+
+  container.style.display = 'block';
+  container.classList.add('visible');
+  container.style.borderColor = isScreen ? 'rgba(255,79,106,.4)' : 'rgba(34,216,126,.4)';
+
+  container.innerHTML = `
+    <div class="verdict">
+      <div class="verdict-icon">${isScreen ? '🚨' : '✅'}</div>
+      <div>
+        <div class="verdict-label" style="color:${isScreen?'var(--red)':'var(--green)'}">${isScreen ? 'PHOTO OF SCREEN' : 'REAL PHOTO'}</div>
+        <div class="verdict-sub">model.pkl score: ${score.toFixed(3)}</div>
+      </div>
+    </div>
+    <div class="gauge-label"><span>Real</span><span>${pct}% screen likelihood</span><span>Screen</span></div>
+    <div class="gauge-track">
+      <div class="gauge-fill" id="gfill-${Date.now()}" style="width:0%;background:${isScreen ? 'var(--red)' : 'var(--green)'}"></div>
+    </div>`;
+
+  const fill = container.querySelector('.gauge-fill');
+  requestAnimationFrame(() => { fill.style.width = pct + '%'; });
+}
+
+function analyseFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+
+  document.getElementById('preview-wrap').style.display = 'block';
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('preview-img').src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+
+  const spinner = document.getElementById('upload-spinner');
+  spinner.style.display = 'block';
+  document.getElementById('upload-result').style.display = 'none';
+
+  setTimeout(async () => {
+    const result = await getPrediction(file);
+    spinner.style.display = 'none';
+    if (result) {
+      renderResult(document.getElementById('upload-result'), result);
+    }
+  }, 30);
+}
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragover');
+  analyseFile(e.dataTransfer.files[0]);
+});
+document.getElementById('file-input').addEventListener('change', e => analyseFile(e.target.files[0]));
+
+let stream = null;
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    await new Promise(resolve => {
+      if (video.readyState >= 2 && video.videoWidth > 0) return resolve();
+      video.onloadeddata = () => resolve();
+    });
+    document.getElementById('btn-capture').disabled = false;
+    document.getElementById('btn-start-cam').textContent = 'Camera active ✓';
+    document.getElementById('btn-start-cam').disabled = true;
+  } catch(e) {
+    alert('Camera access denied or not available: ' + e.message);
+  }
+}
+
+async function captureFrame() {
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  canvas.width = 512; canvas.height = 384;
+  const ctx = canvas.getContext('2d');
+
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const targetAR = 512 / 384;
+  const srcAR = vw / vh;
+  let sx, sy, sw, sh;
+  if (srcAR > targetAR) {
+    sh = vh; sw = vh * targetAR;
+    sx = (vw - sw) / 2; sy = 0;
+  } else {
+    sw = vw; sh = vw / targetAR;
+    sx = 0; sy = (vh - sh) / 2;
+  }
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, 512, 384);
+
+  const spinner = document.getElementById('cam-spinner');
+  spinner.style.display = 'block';
+  document.getElementById('cam-result').style.display = 'none';
+
+  canvas.toBlob(async (blob) => {
+    const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+    const result = await getPrediction(file);
+    spinner.style.display = 'none';
+    if (result) {
+      renderResult(document.getElementById('cam-result'), result);
+    }
+  }, 'image/jpeg', 0.95);
+}
+</script>
+</body>
+</html>
