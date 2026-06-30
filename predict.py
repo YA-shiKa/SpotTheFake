@@ -1,18 +1,38 @@
+"""
+predict.py — Screen-photo (recapture) detector.
+
+Usage:
+    python predict.py some_image.jpg
+Prints ONE number from 0 to 1:
+    0 = real photo,  1 = photo of a screen (recapture / fraud)
+"""
+
 import sys, os, time, pickle
 import numpy as np
 from PIL import Image
 import cv2
 
-_DIR = os.path.dirname(os.path.abspath(__file__))
+_DIR   = os.path.dirname(os.path.abspath(__file__))
 _MODEL = os.path.join(_DIR, "model.pkl")
 
 PREFER_ML_IF_AVAILABLE = True
 
 
+# ────────────────────────────────────────────────────────────────
+#  Pure-CV heuristic (no model needed)
+# ────────────────────────────────────────────────────────────────
+
 def _heuristic(image_path: str) -> float:
+    """
+    Returns a score in [0, 1]: higher = more screen-like.
+      1. Multi-scale FFT peak-to-mean ratio 
+      2. Chromatic-aberration proxy / channel-edge alignment (weight 0.25) 
+      3. Scanline / subpixel banding (weight 0.15)
+    """
     img_pil = Image.open(image_path).convert("RGB")
     rgb_full = np.array(img_pil)
 
+    # ── Signal 1: multi-scale FFT peak-to-mean ──────────────────
     ptms = []
     for size in [(256, 192), (512, 384), (1024, 768)]:
         rgb_s = cv2.resize(rgb_full, size, interpolation=cv2.INTER_AREA)
@@ -30,6 +50,7 @@ def _heuristic(image_path: str) -> float:
     fft_ptm = max(ptms)
     s1 = float(np.clip((fft_ptm - 12) / 24, 0, 1))
 
+    # ── Signal 2: chromatic-aberration / channel-edge alignment ─
     rgb_m = cv2.resize(rgb_full, (512, 384), interpolation=cv2.INTER_AREA)
     r_lap = np.abs(cv2.Laplacian(rgb_m[:, :, 0].astype(np.float32), cv2.CV_32F))
     g_lap = np.abs(cv2.Laplacian(rgb_m[:, :, 1].astype(np.float32), cv2.CV_32F))
@@ -40,6 +61,7 @@ def _heuristic(image_path: str) -> float:
     chrom_mean = (rg + rb + gb) / 3
     s2 = float(np.clip((chrom_mean - 0.965) / 0.025, 0, 1))
 
+    # ── Signal 3: row/column scanline banding ───────────────────
     gray_m = cv2.cvtColor(rgb_m, cv2.COLOR_RGB2GRAY).astype(np.float32)
 
     def short_lag_energy(signal_1d):
@@ -58,9 +80,16 @@ def _heuristic(image_path: str) -> float:
     return float(np.clip(score, 0.0, 1.0))
 
 
+# ────────────────────────────────────────────────────────────────
+#  ML predictor
+# ────────────────────────────────────────────────────────────────
+
 _model_cache = None
 
 def _ml_predict(image_path: str) -> float:
+    """
+    Multi-view test-time averaging
+    """
     global _model_cache
     if _model_cache is None:
         with open(_MODEL, 'rb') as f:
@@ -90,21 +119,41 @@ def _ml_predict(image_path: str) -> float:
     return float(np.mean(probs))
 
 
+# ────────────────────────────────────────────────────────────────
+#  Public API
+# ────────────────────────────────────────────────────────────────
+
 def predict(image_path: str) -> float:
+    """
+    Returns a fraud score in [0, 1].
+      0 = definitely a real photo
+      1 = definitely a photo of a screen
+
+    Recommended threshold: 0.5 (tune toward 0.35 to catch more cheaters
+    at the cost of more false positives, or 0.65 to reduce false
+    positives — see the project README for the cost-of-error tradeoff).
+    """
     if PREFER_ML_IF_AVAILABLE and os.path.exists(_MODEL):
         try:
             return _ml_predict(image_path)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[predict] ML model failed ({e}), falling back to heuristic",
+                  file=sys.stderr)
     return _heuristic(image_path)
 
 
+# ────────────────────────────────────────────────────────────────
+#  CLI entry point
+# ────────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
+        print("Usage: python predict.py <image_path>", file=sys.stderr)
         sys.exit(1)
 
     path = sys.argv[1]
     if not os.path.exists(path):
+        print(f"Error: file not found: {path}", file=sys.stderr)
         sys.exit(1)
 
     t0 = time.perf_counter()
@@ -112,3 +161,5 @@ if __name__ == "__main__":
     ms = (time.perf_counter() - t0) * 1000
 
     print(f"{score:.4f}")
+    label = "SCREEN (fraud)" if score >= 0.5 else "REAL"
+    print(f"  -> {label}  (latency: {ms:.1f} ms)", file=sys.stderr)
