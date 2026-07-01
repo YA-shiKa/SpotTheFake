@@ -78,12 +78,12 @@ reliably would need more labelled photos rather than more clever code — see
   of the 1024 px pass (and/or use fewer views) once the cheaper, faster scales
   already give a confident verdict.
 - **Cost per image:** on-device ≈ free (runs locally, no network call, no
-  per-image API fee). For a cloud server: at ~250 ms/image, a single CPU core
+  per-image API fee). For a cloud server: at 250 ms/image, a single CPU core
   processes ~14,400 images/hour. A small on-demand instance like an AWS
-  t3.medium (~$0.0416/hr) running this serially works out to roughly
-  **$0.003 per 1,000 images** (~$2.90 per million), before accounting for
+  t3.medium ($0.0416/hr) running this serially works out to roughly
+  **$0.003 per 1,000 images** ($2.90 per million), before accounting for
   request overhead, idle time, or batching gains from running multiple
-  workers per box — so treat this as a rough floor, not a guaranteed price.
+  workers per box, so treat this as a rough floor, not a guaranteed price.
 
 ## Demo
 
