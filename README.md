@@ -89,7 +89,8 @@ reliably would need more labelled photos rather than more clever code — see
 
 `server.py` + `demo.html` provide a small local web demo (image upload and live
 camera capture) that calls the same `predict()` function. A preview video of the
-live-camera demo is included separately.
+live-camera demo is included.
+https://drive.google.com/file/d/1shGqYDAf-T4bJviDc6pksTsZohChFaIe/view?usp=drivesdk
 
 To run:
 ```
